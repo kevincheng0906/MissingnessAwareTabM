@@ -12,7 +12,7 @@ import torch
 from tabm import TabM
 
 from .data import encode_labels, load_raw_dataset
-from .engine import evaluate, make_loader, select_device
+from .engine import evaluate, evaluate_regression, make_loader, select_device
 
 
 def main():
@@ -28,15 +28,24 @@ def main():
     with np.load(args.run_dir / 'splits.npz') as splits:
         train_idx, test_idx = splits['train'], splits['test']
     x, raw_y = load_raw_dataset(results['dataset'])
-    y, encoder = encode_labels(raw_y, train_idx)
-    if [str(v) for v in encoder.classes_] != results['class_names']:
-        raise RuntimeError('Dataset label mapping changed; cannot safely evaluate.')
+    regression = results.get('task_type') == 'regression'
+    if regression:
+        target_stats = results['target_transform']
+        mean, std = target_stats['mean'], target_stats['std']
+        y = ((raw_y.to_numpy(dtype=np.float32) - mean) / std).astype(np.float32)
+    else:
+        y, encoder = encode_labels(raw_y, train_idx)
+        if [str(v) for v in encoder.classes_] != results['class_names']:
+            raise RuntimeError('Dataset label mapping changed; cannot safely evaluate.')
     x_num, x_cat = prep.transform(x.iloc[test_idx])
     loader = make_loader(x_num, x_cat, y[test_idx], args.batch_size, shuffle=False)
     device = select_device(args.device)
     model = TabM.make(**checkpoint['model_kwargs']).to(device)
     model.load_state_dict(checkpoint['state_dict'], strict=True)
-    metrics = evaluate(model, loader, device)
+    metrics = (
+        evaluate_regression(model, loader, device, mean, std)
+        if regression else evaluate(model, loader, device)
+    )
     print(json.dumps({'best_epoch': checkpoint['best_epoch'], 'test': metrics}, indent=2))
 
 
