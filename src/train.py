@@ -145,7 +145,7 @@ def main():
                   f'val macro-F1 {val_metrics["macro_f1"]:.4f}')
         early_stop_metric = 'rmse' if regression else 'log_loss'
         if val_metrics[early_stop_metric] < best_val_loss - 1e-6:
-            best_val_loss = val_metrics['log_loss']
+            best_val_loss = val_metrics[early_stop_metric]
             best_epoch = epoch
             stale = 0
             torch.save({'state_dict': model.state_dict(), 'model_kwargs': model_kwargs,
