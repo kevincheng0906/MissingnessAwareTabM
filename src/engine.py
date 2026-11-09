@@ -5,7 +5,10 @@ from __future__ import annotations
 import numpy as np
 import torch
 import torch.nn.functional as F
-from sklearn.metrics import accuracy_score, f1_score, log_loss, roc_auc_score
+from sklearn.metrics import (
+    accuracy_score, f1_score, log_loss, mean_absolute_error,
+    mean_squared_error, r2_score, roc_auc_score,
+)
 from torch.utils.data import DataLoader, TensorDataset
 
 
@@ -40,6 +43,46 @@ def branch_cross_entropy(logits: torch.Tensor, target: torch.Tensor) -> torch.Te
     """Average CE over samples AND branches, as in the official TabM training."""
     b, k, c = logits.shape
     return F.cross_entropy(logits.reshape(b * k, c), target.repeat_interleave(k))
+
+
+def branch_mse(predictions: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """Average per-branch MSE on train-standardized regression targets."""
+    if predictions.ndim != 3 or predictions.shape[-1] != 1:
+        raise ValueError(f'Regression output must be (B, K, 1), got {predictions.shape}')
+    pred = predictions.squeeze(-1)
+    return F.mse_loss(pred, target[:, None].expand_as(pred))
+
+
+@torch.inference_mode()
+def predict_regression(
+    model, loader: DataLoader, device: torch.device,
+    target_mean: float, target_std: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Average branch predictions and invert the train-fitted target scaling."""
+    model.eval()
+    predictions, labels = [], []
+    for x_num, x_cat, y in loader:
+        outputs = forward_tabm(model, x_num, x_cat, device)
+        preds = outputs.squeeze(-1).mean(dim=1)
+        predictions.append(preds.cpu().numpy())
+        labels.append(y.numpy())
+    preds = np.concatenate(predictions) * target_std + target_mean
+    truth = np.concatenate(labels) * target_std + target_mean
+    return preds, truth
+
+
+def evaluate_regression(
+    model, loader: DataLoader, device: torch.device,
+    target_mean: float, target_std: float,
+) -> dict[str, float]:
+    preds, truth = predict_regression(
+        model, loader, device, target_mean, target_std
+    )
+    return {
+        'rmse': float(np.sqrt(mean_squared_error(truth, preds))),
+        'mae': float(mean_absolute_error(truth, preds)),
+        'r2': float(r2_score(truth, preds)),
+    }
 
 
 @torch.inference_mode()

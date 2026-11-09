@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from sklearn.datasets import fetch_openml, load_breast_cancer
+from sklearn.datasets import fetch_california_housing, fetch_openml, load_breast_cancer
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, StandardScaler
@@ -25,21 +25,23 @@ def load_raw_dataset(name: str) -> tuple[pd.DataFrame, pd.Series]:
         x, y = fetch_openml(data_id=1590, as_frame=True, return_X_y=True)
     elif name == 'breast_cancer':
         x, y = load_breast_cancer(as_frame=True, return_X_y=True)
+    elif name == 'california_housing':
+        x, y = fetch_california_housing(as_frame=True, return_X_y=True)
     else:
         raise ValueError(f'Unknown dataset: {name}')
     return x.reset_index(drop=True), pd.Series(y).reset_index(drop=True)
 
 
-def make_splits(labels: pd.Series, seed: int = 42) -> DatasetSplits:
+def make_splits(labels: pd.Series, seed: int = 42, *, regression: bool = False) -> DatasetSplits:
     indices = np.arange(len(labels), dtype=np.int64)
     train, holdout = train_test_split(
-        indices, test_size=0.30, random_state=seed, stratify=labels
+        indices, test_size=0.30, random_state=seed, stratify=None if regression else labels
     )
     val, test = train_test_split(
         holdout,
         test_size=0.50,
         random_state=seed,
-        stratify=labels.iloc[holdout],
+        stratify=None if regression else labels.iloc[holdout],
     )
     return DatasetSplits(train=train, val=val, test=test)
 

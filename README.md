@@ -6,18 +6,20 @@ NYCU Deep Learning (Fall 2026), Master's final project.
 
 ## Phase 1 — Original TabM Baseline
 
-A reproducible classification baseline using the official [TabM package](https://github.com/yandex-research/tabm). This phase **does not use** branch-specific masking or dynamic gating.
+A reproducible classification and regression baseline using the official [TabM package](https://github.com/yandex-research/tabm). This phase **does not use** branch-specific masking or dynamic gating.
 
 ### Dataset and methods
 
 - **Adult Income** (OpenML ID 1590): primary binary-classification dataset (first download requires internet).
+- **California Housing** (scikit-learn): primary regression benchmark (20,640 samples, 8 numerical features; first download may require internet).
 - **Breast Cancer** (scikit-learn): quick smoke-test dataset, not a paper-scale benchmark.
-- Stratified **70% train / 15% validation / 15% test** split, fixed by `--split-seed`.
+- Fixed **70% train / 15% validation / 15% test** splits, controlled by `--split-seed` (stratified for classification; random for regression).
 - Fit median imputation, standardization, and categorical encoders **only on train**. Unseen categories get a reserved index.
 - Classification: **cross-entropy per ensemble branch**, averaged over branches. Evaluation averages **softmax probabilities**, not logits.
-- AdamW, gradient clipping, best checkpoint chosen by validation **log loss** and early stopping.
+- Regression: **MSE per ensemble branch** on targets standardized using *train-only* statistics. At evaluation, inverse-transform each prediction and compute RMSE, MAE and R² in the original target units.
+- AdamW, gradient clipping, early stopping and checkpoint selection by validation **log loss** (classification) or **RMSE** (regression).
 - Evaluate the held-out test split only after selecting the best checkpoint.
-- Results include accuracy, macro-F1, log loss and binary ROC-AUC.
+- Classification results include accuracy, macro-F1, log loss and binary ROC-AUC; regression results include RMSE, MAE and R².
 
 ### Structure
 
@@ -46,6 +48,14 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### Offline sanity checks
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+These tests cover classification/regression loss shapes, label splits, and regression inverse scaling without requiring a dataset download.
+
 ### Smoke test
 
 ```bash
@@ -53,11 +63,14 @@ python -m src.train --dataset breast_cancer --epochs 5 --patience 3 --k 4 --d-bl
 python -m src.evaluate --run-dir runs/breast_cancer_seed42
 ```
 
-### Baseline experiment (Adult Income)
+### Baseline experiments
 
 ```bash
 python -m src.train --dataset adult --epochs 150 --patience 20 --k 32
 python -m src.evaluate --run-dir runs/adult_seed42
+
+python -m src.train --dataset california_housing --epochs 150 --patience 20 --k 32
+python -m src.evaluate --run-dir runs/california_housing_seed42
 ```
 
 Use `python -m src.train --help` for all settings. The output directory `runs/<dataset>_seed<seed>/` contains:
@@ -68,7 +81,7 @@ Use `python -m src.train --help` for all settings. The output directory `runs/<d
 - `history.csv`: per-epoch validation metrics.
 - `metrics.json`: training setup, selected epoch, validation and test metrics.
 
-The baseline is a **controlled implementation of original TabM**; it does not claim to exactly reproduce paper scores, which depend on benchmark-specific feature embeddings and hyperparameter tuning.
+The baseline supports two task types but introduces no new TabM modules. It is a **controlled implementation of original TabM**; it does not claim to exactly reproduce paper scores, which depend on benchmark-specific feature embeddings and hyperparameter tuning.
 
 ### Planned ablations
 
