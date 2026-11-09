@@ -48,6 +48,14 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### Offline sanity checks
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+These tests cover classification/regression loss shapes, label splits, and regression inverse scaling without requiring a dataset download.
+
 ### Smoke test
 
 ```bash
